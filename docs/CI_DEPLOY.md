@@ -61,12 +61,17 @@ Secrets:
 
 Variables:
 
-| Variable       | Value                                              |
-| -------------- | -------------------------------------------------- |
-| `APP_NAME`     | Short app name (e.g. `mynotes`)                    |
-| `AWS_REGION`   | Region to deploy in (`us-east-1` if custom domain) |
-| `DOMAIN_NAME`  | Custom domain, or leave unset for the CloudFront URL |
-| `INCLUDE_WWW`  | `true` / `false`                                   |
+| Variable            | Value                                                       |
+| ------------------- | ----------------------------------------------------------- |
+| `APP_NAME`          | Short app name (e.g. `mynotes`)                             |
+| `AWS_REGION`        | Region to deploy in (`us-east-1` if custom domain)          |
+| `ENABLE_WEBSOCKET`  | `true` to provision the WebSocket module (default `false`)  |
+| `HOSTING_MODE`      | `cloudfront` (default) or `existing-bucket`                 |
+| `DOMAIN_NAME`       | (cloudfront) custom domain, or unset for the CloudFront URL |
+| `INCLUDE_WWW`       | (cloudfront) `true` / `false`                               |
+| `SITE_BUCKET_NAME`  | (existing-bucket) the existing site bucket                  |
+| `SITE_PATH_PREFIX`  | (existing-bucket) sub-folder, e.g. `myapp`                  |
+| `SITE_BASE_URL`     | (existing-bucket) public URL, for the deploy output         |
 
 **(Optional)** create a `production` Environment (Settings → Environments) for
 approval gates.

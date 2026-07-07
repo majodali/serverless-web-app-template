@@ -10,7 +10,7 @@ import {
   ScanCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { env, INDEXES } from "./env";
-import type { User, Item } from "./types";
+import type { User, Item, Connection } from "./types";
 
 const client = new DynamoDBClient({ region: env.region });
 export const ddb = DynamoDBDocumentClient.from(client, {
@@ -93,4 +93,30 @@ export async function deleteItem(ownerId: string, itemId: string): Promise<void>
       Key: { ownerId, itemId },
     })
   );
+}
+
+// ---- Connections (WebSocket module) ----
+
+export async function putConnection(conn: Connection): Promise<void> {
+  await ddb.send(new PutCommand({ TableName: env.connectionsTable, Item: conn }));
+}
+
+export async function deleteConnection(connectionId: string): Promise<void> {
+  await ddb.send(
+    new DeleteCommand({ TableName: env.connectionsTable, Key: { connectionId } })
+  );
+}
+
+export async function getConnection(
+  connectionId: string
+): Promise<Connection | undefined> {
+  const res = await ddb.send(
+    new GetCommand({ TableName: env.connectionsTable, Key: { connectionId } })
+  );
+  return res.Item as Connection | undefined;
+}
+
+export async function getAllConnections(): Promise<Connection[]> {
+  const res = await ddb.send(new ScanCommand({ TableName: env.connectionsTable }));
+  return (res.Items as Connection[]) ?? [];
 }

@@ -56,6 +56,20 @@ export class AppStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
+    // Connections table only exists when the WebSocket module is enabled.
+    let connections: dynamodb.Table | undefined;
+    if (config.enableWebsocket) {
+      connections = new dynamodb.Table(this, "Connections", {
+        partitionKey: { name: "connectionId", type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: RemovalPolicy.DESTROY, // ephemeral
+      });
+      connections.addGlobalSecondaryIndex({
+        indexName: "UserIndex",
+        partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      });
+    }
+
     // ---- JWT signing secret ----
     const jwtSecret = new secretsmanager.Secret(this, "JwtSecret", {
       description: `${config.appName} JWT signing secret`,
@@ -69,6 +83,9 @@ export class AppStack extends Stack {
       JWT_SECRET: jwtSecret.secretValue.unsafeUnwrap(),
       NODE_OPTIONS: "--enable-source-maps",
     };
+    if (connections) commonEnv.CONNECTIONS_TABLE = connections.tableName;
+
+    const dataTables = [users, items, ...(connections ? [connections] : [])];
 
     const makeFn = (id: string, entry: string): lambdaNode.NodejsFunction => {
       const fn = new lambdaNode.NodejsFunction(this, id, {
@@ -86,7 +103,7 @@ export class AppStack extends Stack {
           sourceMap: true,
         },
       });
-      for (const t of [users, items]) t.grantReadWriteData(fn);
+      for (const t of dataTables) t.grantReadWriteData(fn);
       return fn;
     };
 
@@ -133,7 +150,94 @@ export class AppStack extends Stack {
     route("CreateItem", apigw.HttpMethod.POST, "/items", "http/createItem.ts");
     route("DeleteItem", apigw.HttpMethod.DELETE, "/items/{itemId}", "http/deleteItem.ts");
 
-    // ---- Frontend hosting: S3 + CloudFront (+ optional custom domain) ----
+    // ---- WebSocket API (optional module) ----
+    let wsUrl = "";
+    if (config.enableWebsocket) {
+      const wsConnect = makeFn("WsConnectFn", "ws/connect.ts");
+      const wsDisconnect = makeFn("WsDisconnectFn", "ws/disconnect.ts");
+      const wsEcho = makeFn("WsEchoFn", "ws/echo.ts");
+      const wsBroadcast = makeFn("WsBroadcastFn", "ws/broadcast.ts");
+
+      const wsApi = new apigw.WebSocketApi(this, "WsApi", {
+        connectRouteOptions: {
+          integration: new apigwInteg.WebSocketLambdaIntegration("ConnectInteg", wsConnect),
+        },
+        disconnectRouteOptions: {
+          integration: new apigwInteg.WebSocketLambdaIntegration("DisconnectInteg", wsDisconnect),
+        },
+      });
+      wsApi.addRoute("echo", {
+        integration: new apigwInteg.WebSocketLambdaIntegration("EchoInteg", wsEcho),
+      });
+      wsApi.addRoute("broadcast", {
+        integration: new apigwInteg.WebSocketLambdaIntegration("BroadcastInteg", wsBroadcast),
+      });
+      const wsStage = new apigw.WebSocketStage(this, "WsStage", {
+        webSocketApi: wsApi,
+        stageName: "prod",
+        autoDeploy: true,
+      });
+      for (const fn of [wsConnect, wsDisconnect, wsEcho, wsBroadcast]) {
+        wsApi.grantManageConnections(fn);
+      }
+      wsUrl = wsStage.url;
+      new CfnOutput(this, "WebSocketUrl", { value: wsUrl });
+    }
+
+    // Runtime config the SPA fetches on load (never hardcode URLs in the build).
+    const apiUrl = httpApi.apiEndpoint;
+    const runtimeConfig: Record<string, string> = { apiUrl, appName: config.appName };
+    if (wsUrl) runtimeConfig.wsUrl = wsUrl;
+
+    // ---- Frontend hosting ----
+    const siteUrl = this.deployFrontend(config, runtimeConfig);
+
+    // ---- Seed the first admin (custom resource) ----
+    const seedFn = makeFn("SeedAdminFn", "ops/seedAdmin.ts");
+    seedFn.addEnvironment("ADMIN_USERNAME", config.adminUsername);
+    seedFn.addEnvironment("ADMIN_PASSWORD", config.adminPassword);
+    const seedProvider = new customResources.Provider(this, "SeedProvider", {
+      onEventHandler: seedFn,
+    });
+    new CustomResource(this, "SeedAdmin", {
+      serviceToken: seedProvider.serviceToken,
+      properties: { username: config.adminUsername },
+    });
+
+    // ---- Outputs ----
+    new CfnOutput(this, "SiteUrl", { value: siteUrl, description: "Open this to use the app" });
+    new CfnOutput(this, "ApiUrl", { value: apiUrl });
+  }
+
+  /** Deploy the built SPA per the configured hosting mode; returns the site URL. */
+  private deployFrontend(
+    config: AppConfig,
+    runtimeConfig: Record<string, string>
+  ): string {
+    const sources = [
+      s3deploy.Source.asset(FRONTEND_DIST),
+      s3deploy.Source.jsonData("config.json", runtimeConfig),
+    ];
+
+    if (config.hostingMode === "existing-bucket") {
+      // Deploy INTO an existing site bucket under a sub-folder; never touch the
+      // rest of the bucket (prune: false). The SPA must be BUILT with base
+      // "/<prefix>/" — vite.config.ts reads SITE_PATH_PREFIX to do that.
+      if (!config.siteBucketName) {
+        throw new Error("HOSTING_MODE=existing-bucket requires SITE_BUCKET_NAME");
+      }
+      const bucket = s3.Bucket.fromBucketName(this, "ExistingSiteBucket", config.siteBucketName);
+      new s3deploy.BucketDeployment(this, "DeploySite", {
+        destinationBucket: bucket,
+        destinationKeyPrefix: config.sitePathPrefix,
+        prune: false,
+        cacheControl: [s3deploy.CacheControl.fromString("no-cache")],
+        sources,
+      });
+      return config.siteBaseUrl;
+    }
+
+    // Default: self-contained S3 + CloudFront (+ optional custom domain).
     const siteBucket = new s3.Bucket(this, "SiteBucket", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
@@ -144,7 +248,6 @@ export class AppStack extends Stack {
     let certificate: acm.ICertificate | undefined;
     let domainNames: string[] | undefined;
     let hostedZone: route53.IHostedZone | undefined;
-
     if (config.domainName) {
       hostedZone = route53.HostedZone.fromLookup(this, "Zone", {
         domainName: config.domainName,
@@ -189,40 +292,18 @@ export class AppStack extends Stack {
       }
     }
 
-    // Runtime config the SPA fetches on load (never hardcode URLs in the build).
-    const apiUrl = httpApi.apiEndpoint;
     new s3deploy.BucketDeployment(this, "DeploySite", {
       destinationBucket: siteBucket,
       distribution,
       distributionPaths: ["/*"],
-      sources: [
-        s3deploy.Source.asset(FRONTEND_DIST),
-        s3deploy.Source.jsonData("config.json", { apiUrl, appName: config.appName }),
-      ],
+      sources,
     });
 
-    // ---- Seed the first admin (custom resource) ----
-    const seedFn = makeFn("SeedAdminFn", "ops/seedAdmin.ts");
-    seedFn.addEnvironment("ADMIN_USERNAME", config.adminUsername);
-    seedFn.addEnvironment("ADMIN_PASSWORD", config.adminPassword);
-    const seedProvider = new customResources.Provider(this, "SeedProvider", {
-      onEventHandler: seedFn,
-    });
-    new CustomResource(this, "SeedAdmin", {
-      serviceToken: seedProvider.serviceToken,
-      properties: { username: config.adminUsername },
-    });
-
-    // ---- Outputs ----
-    new CfnOutput(this, "SiteUrl", {
-      value: config.domainName
-        ? `https://${config.domainName}`
-        : `https://${distribution.distributionDomainName}`,
-      description: "Open this to use the app",
-    });
     new CfnOutput(this, "CloudFrontUrl", {
       value: `https://${distribution.distributionDomainName}`,
     });
-    new CfnOutput(this, "ApiUrl", { value: apiUrl });
+    return config.domainName
+      ? `https://${config.domainName}`
+      : `https://${distribution.distributionDomainName}`;
   }
 }

@@ -32,8 +32,13 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       CDK_DEFAULT_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       APP_NAME: ${{ vars.APP_NAME }}
+      ENABLE_WEBSOCKET: ${{ vars.ENABLE_WEBSOCKET || 'false' }}
+      HOSTING_MODE: ${{ vars.HOSTING_MODE || 'cloudfront' }}
       DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
       INCLUDE_WWW: ${{ vars.INCLUDE_WWW || 'false' }}
+      SITE_BUCKET_NAME: ${{ vars.SITE_BUCKET_NAME }}
+      SITE_PATH_PREFIX: ${{ vars.SITE_PATH_PREFIX }}
+      SITE_BASE_URL: ${{ vars.SITE_BASE_URL }}
       ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
       ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
     steps:

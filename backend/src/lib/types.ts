@@ -36,3 +36,18 @@ export interface Item {
   body: string;
   createdAt: number;
 }
+
+// ---- WebSocket module (only used when ENABLE_WEBSOCKET=true) ----
+
+export interface Connection {
+  connectionId: string;
+  userId: string;
+  username: string;
+  connectedAt: number;
+}
+
+// Server -> client push payloads (extend for your app).
+export type ServerEvent =
+  | { type: "echo"; text: string; from: string }
+  | { type: "broadcast"; text: string; from: string }
+  | { type: "error"; message: string };
