@@ -1,0 +1,48 @@
+# Customizing the template
+
+## 1. Name your app
+
+Set `APP_NAME` in `infra/.env` (local) or as a repo **Variable** (CI). It's used
+to name the CloudFormation stack and resources, so pick something short and
+stable (e.g. `mynotes`). Update the `<title>` in `frontend/index.html` and the
+brand text in `frontend/src/components/AppShell.tsx`.
+
+## 2. Point it at a domain (optional)
+
+Set `DOMAIN_NAME` (and `INCLUDE_WWW`) once you have a Route 53 hosted zone in the
+same AWS account. Redeploy; CDK provisions the ACM cert + DNS. Use `us-east-1`.
+
+## 3. Add your own resource (copy the `items` example)
+
+`items` is a minimal per-user CRUD resource. To add e.g. `notes`:
+
+1. **Backend** — copy `backend/src/http/listItems.ts`, `createItem.ts`,
+   `deleteItem.ts` to `notes*` and adjust the shape. Add a table accessor in
+   `backend/src/lib/ddb.ts` if you need a new table (or reuse `Items`).
+2. **Infra** — in `infra/lib/app-stack.ts`, add the Lambda(s) with `makeFn(...)`
+   and register routes with `route(...)`. If you add a table, define it like the
+   `Items` table and `grantReadWriteData` to the relevant functions.
+3. **Frontend** — add API methods in `frontend/src/api.ts` and a screen/component.
+4. **Diagnostics** — add a step in `frontend/src/diagnostics.ts` that exercises
+   the new endpoint end-to-end (create → read → delete). This is the convention:
+   **every feature ships with a self-test.**
+
+## 4. Auth model
+
+- Accounts are **admin-created** (no email/signup). The first admin is seeded on
+  deploy from `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
+- Tokens are JWTs signed with a secret in Secrets Manager (injected as an env
+  var). Password hashing is bcrypt.
+- To allow self-signup instead, add a public `POST /signup` handler modeled on
+  `adminCreateUser.ts` (drop the admin check) — and think about abuse controls.
+
+## 5. Conventions to keep
+
+- **CommonJS Lambda bundling** (`OutputFormat.CJS` in `app-stack.ts`). ESM output
+  breaks deps that do dynamic `require()` of Node builtins (e.g. bcryptjs).
+- **Runtime config**: the SPA fetches `/config.json` (written at deploy) for the
+  API URL, so the build never hardcodes environment URLs.
+- **Non-mutating self-tests** for anything destructive (password changes, deletes
+  of real data) — assert the validation/negative path so diagnostics is safe to
+  run against production.
+- **PR checks gate `main`; deploy runs on merge.** Keep PRs cohesive (one feature).
