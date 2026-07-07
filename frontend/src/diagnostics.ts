@@ -3,7 +3,7 @@
 // "full" steps create + clean up their own throwaway data.
 //
 // Convention: add a step here for every new feature/endpoint you build.
-import { api, ApiError } from "./api";
+import { api, ApiError, getToken } from "./api";
 import { loadRuntimeConfig } from "./config";
 import type { PublicUser } from "./types";
 
@@ -129,16 +129,52 @@ export const STEPS: Step[] = [
   },
 ];
 
-export function stepsFor(mode: "smoke" | "all"): Step[] {
-  return mode === "all" ? STEPS : STEPS.filter((s) => s.kind === "smoke");
-}
+// WebSocket module test — only included when the deployed config has a wsUrl.
+const WS_STEP: Step = {
+  id: "websocket",
+  name: "WebSocket connect + echo round-trip",
+  kind: "full",
+  run: async () => {
+    const { wsUrl } = await loadRuntimeConfig();
+    const token = getToken();
+    assert(wsUrl, "no wsUrl configured");
+    assert(token, "no auth token");
+    await new Promise<void>((resolve, reject) => {
+      const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);
+      const text = `diag-${Date.now()}`;
+      const timer = setTimeout(() => {
+        ws.close();
+        reject(new Error("timed out waiting for echo"));
+      }, 10000);
+      ws.onopen = () => ws.send(JSON.stringify({ action: "echo", text }));
+      ws.onmessage = (ev) => {
+        try {
+          const e = JSON.parse(ev.data) as { type?: string; text?: string };
+          if (e.type === "echo" && e.text === text) {
+            clearTimeout(timer);
+            ws.close();
+            resolve();
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+      ws.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error("WebSocket connection error"));
+      };
+    });
+  },
+};
 
 export async function runDiagnostics(
   mode: "smoke" | "all",
   user: PublicUser,
   onUpdate: (results: StepResult[]) => void
 ): Promise<StepResult[]> {
-  const chosen = stepsFor(mode);
+  const cfg = await loadRuntimeConfig();
+  const all = cfg.wsUrl ? [...STEPS, WS_STEP] : STEPS;
+  const chosen = mode === "all" ? all : all.filter((s) => s.kind === "smoke");
   const results: StepResult[] = chosen.map((s) => ({
     id: s.id,
     name: s.name,

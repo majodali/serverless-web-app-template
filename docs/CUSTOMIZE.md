@@ -27,7 +27,33 @@ same AWS account. Redeploy; CDK provisions the ACM cert + DNS. Use `us-east-1`.
    the new endpoint end-to-end (create → read → delete). This is the convention:
    **every feature ships with a self-test.**
 
-## 4. Auth model
+## 4. Optional modules
+
+Toggle these in `infra/.env` (local) or repo **Variables** (CI):
+
+- **WebSocket** — set `ENABLE_WEBSOCKET=true`. This provisions the WebSocket API,
+  a connections table, and `connect/disconnect/echo/broadcast` handlers, and adds
+  `wsUrl` to the runtime config. The frontend `AppSocket` client and the
+  WebSocket diagnostics test activate automatically. Build your realtime feature
+  on the `echo`/`broadcast` handlers (replace "all connections" with your own
+  targeting). **Never `PostToConnection` in `$connect`** — reply to the client's
+  first message instead.
+
+- **Hosting** — `HOSTING_MODE`:
+  - `cloudfront` (default): own S3 + CloudFront; set `DOMAIN_NAME` for a custom
+    domain (needs a Route 53 zone; deploy in `us-east-1`).
+  - `existing-bucket`: deploy the SPA into an existing site bucket under a path.
+    Set `SITE_BUCKET_NAME` and `SITE_PATH_PREFIX` (e.g. `myapp` →
+    `example.com/myapp`). The SPA is automatically built with the matching base
+    path, and only objects under the prefix are ever written.
+
+### Adding a new module
+
+Keep the pattern: gate infra with a `config` flag, add the backend handlers,
+surface any runtime values through `config.json`, feature-detect on the frontend,
+and add a diagnostics step that only runs when the module is enabled.
+
+## 5. Auth model
 
 - Accounts are **admin-created** (no email/signup). The first admin is seeded on
   deploy from `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
@@ -36,7 +62,7 @@ same AWS account. Redeploy; CDK provisions the ACM cert + DNS. Use `us-east-1`.
 - To allow self-signup instead, add a public `POST /signup` handler modeled on
   `adminCreateUser.ts` (drop the admin check) — and think about abuse controls.
 
-## 5. Conventions to keep
+## 6. Conventions to keep
 
 - **CommonJS Lambda bundling** (`OutputFormat.CJS` in `app-stack.ts`). ESM output
   breaks deps that do dynamic `require()` of Node builtins (e.g. bcryptjs).

@@ -27,6 +27,20 @@ Browser
                         auth, admin, health, example resource
 ```
 
+## Optional modules & hosting
+
+The template is designed to grow via toggles set in `infra/.env` (locally) or repo
+**Variables** (CI). Everything is off/default until you opt in.
+
+| Setting           | Values                              | Effect                                                                 |
+| ----------------- | ----------------------------------- | ---------------------------------------------------------------------- |
+| `ENABLE_WEBSOCKET`| `true` / `false` (default)          | Provisions a WebSocket API + connections table + `connect/disconnect/echo/broadcast` handlers, and adds a `wsUrl` to the runtime config. Frontend `AppSocket` client + a diagnostics test light up automatically. |
+| `HOSTING_MODE`    | `cloudfront` (default) / `existing-bucket` | `cloudfront`: own S3 + CloudFront (+ optional domain). `existing-bucket`: deploy the SPA into an existing site bucket under `SITE_PATH_PREFIX` (never touches the rest of the bucket). |
+
+The **WebSocket module** bakes in a hard-won lesson: never `PostToConnection`
+during `$connect` (the socket isn't established yet — it 410s and deletes the
+connection). Handlers reply to the first client message instead.
+
 ## Repo layout
 
 ```
