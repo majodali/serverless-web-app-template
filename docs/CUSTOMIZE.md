@@ -1,5 +1,19 @@
 # Customizing the template
 
+## 0. Re-classify — make the methodology declaration yours
+
+Your fresh copy carries the *template's* own methodology declaration
+([majodali/methodology](https://github.com/majodali/methodology)):
+`docs/classification.md`, the `CLAUDE.md` Binding block, and
+`docs/backlog.md` describe the template, not your app. Replace them
+with your project's own declaration first — run
+[`mtool classify`](https://github.com/majodali/methodology-tools) (it
+scaffolds all three from your answers; typical fields for an app built
+from this template: type `web-app`, target `serverless-aws`, the
+C-tier you choose) or hand-edit the three files. If you don't follow
+the methodology, delete the three files instead — an inaccurate
+declaration is worse than none.
+
 ## 1. Name your app
 
 Set `APP_NAME` in `infra/.env` (local) or as a repo **Variable** (CI). It's used
