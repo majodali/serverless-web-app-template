@@ -10,7 +10,9 @@ compliance). Field definitions and omission defaults live in the
 methodology vocabulary, the sole authoritative location for them.
 
 - **C-tier**: C1
-- **Pinned methodology version**: 1.3.0 (compliance target)
+- **Pinned methodology version**: 1.4.0 (compliance target;
+  migrated from 1.3.0 on 2026-08-30 — v1.4.0 migration notes:
+  none mandatory, so the pin bump is the whole migration)
 - **S-level**: S0 (public template code; no secrets — derivatives
   supply their own AWS accounts and OIDC configuration)
 - **Type**: template (a project whose shipped content instantiates
