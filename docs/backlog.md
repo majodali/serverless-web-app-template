@@ -21,6 +21,10 @@ entries update in the same commit as the work they describe (W-003).
   first ([CUSTOMIZE.md step 0](CUSTOMIZE.md)). This repo motivated
   the v1.3.0 `template` type and Q-001 itself.
 
+- [x] **Migrated to methodology 1.4.0** — 2026-08-30; migration
+  notes none mandatory, so the pin bump is the whole migration
+  (scaffold copies inherit the new pin; Q-001 check unchanged).
+
 ## Upcoming
 
 - [ ] **Q-001 at releases** — run the form audit on the tree as part
