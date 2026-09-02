@@ -25,6 +25,17 @@ entries update in the same commit as the work they describe (W-003).
   notes none mandatory, so the pin bump is the whole migration
   (scaffold copies inherit the new pin; Q-001 check unchanged).
 
+- [x] **Migrated to methodology 1.5.0** — 2026-09-02. Five of the six
+  amendments carry migration-note `none`; the sixth, the W-008
+  bootstrap cache, carries the release's one action. `CLAUDE.md` now
+  holds W-008's prescribed reporting block verbatim, copied from the
+  rule's **Required bootstrap text** field and verified
+  byte-identical. Because the shipped tree is the scaffold (Q-001),
+  every derivative gets the block by instantiation, and the block
+  survives re-classification: it is not part of the Binding block
+  that [CUSTOMIZE.md step 0](CUSTOMIZE.md) tells a derivative to
+  replace, which that step now says explicitly.
+
 ## Upcoming
 
 - [ ] **Q-001 at releases** — run the form audit on the tree as part
