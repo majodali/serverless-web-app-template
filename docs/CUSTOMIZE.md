@@ -14,6 +14,14 @@ C-tier you choose) or hand-edit the three files. If you don't follow
 the methodology, delete the three files instead — an inaccurate
 declaration is worse than none.
 
+`CLAUDE.md`'s *Reporting and writing* section is not part of the
+Binding block and does not describe the template. It is a verbatim
+cache of methodology W-008 (reports map their deliverables), required
+of every project that has an Agent bootstrap, so a derivative that
+follows the methodology keeps it unchanged. Deleting `CLAUDE.md`
+removes it along with everything else, which is the right outcome for
+a derivative that does not follow the methodology.
+
 ## 1. Name your app
 
 Set `APP_NAME` in `infra/.env` (local) or as a repo **Variable** (CI). It's used
